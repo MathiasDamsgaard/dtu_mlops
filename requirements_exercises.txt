@@ -21,6 +21,8 @@ pytorch-lightning
 wandb
 snakeviz
 torch_tb_profiler
+tensorflow
+loguru
 # s5 - continuous integration
 pre-commit
 pytest

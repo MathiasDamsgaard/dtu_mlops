@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 import torch
 import typer
 import wandb
-from my_project.data import corrupt_mnist
-from my_project.model import MyAwesomeModel
+from s1_development_environment.exercise_files.final_exercise.data import corrupt_mnist
+from s1_development_environment.exercise_files.final_exercise.model import MyAwesomeModel
 from sklearn.metrics import RocCurveDisplay
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")

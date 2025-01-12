@@ -7,9 +7,10 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 from torch.optim import Adam
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from torchvision.datasets import MNIST
 from torchvision.utils import save_image
+from torch.profiler import profile, ProfilerActivity, tensorboard_trace_handler
 
 # Model Hyperparameters
 dataset_path = "datasets"
@@ -20,7 +21,7 @@ x_dim = 784
 hidden_dim = 400
 latent_dim = 20
 lr = 1e-3
-epochs = 5
+epochs = 1
 
 
 # Data loading
@@ -29,8 +30,21 @@ mnist_transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = MNIST(dataset_path, transform=mnist_transform, train=True, download=True)
 test_dataset = MNIST(dataset_path, transform=mnist_transform, train=False, download=True)
 
-train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
+# Convert datasets to tensors
+train_data = train_dataset.data.float() / 255.0
+train_data = train_data.view(-1, x_dim)
+train_targets = train_dataset.targets
+
+test_data = test_dataset.data.float() / 255.0
+test_data = test_data.view(-1, x_dim)
+test_targets = test_dataset.targets
+
+# Create TensorDatasets
+train_tensor_dataset = TensorDataset(train_data, train_targets)
+test_tensor_dataset = TensorDataset(test_data, test_targets)
+
+train_loader = DataLoader(dataset=train_tensor_dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(dataset=test_tensor_dataset, batch_size=batch_size, shuffle=False)
 
 
 class Encoder(nn.Module):
@@ -117,30 +131,32 @@ optimizer = Adam(model.parameters(), lr=lr)
 
 print("Start training VAE...")
 model.train()
-for epoch in range(epochs):
-    overall_loss = 0
-    for batch_idx, (x, _) in enumerate(train_loader):
-        if batch_idx % 100 == 0:
-            print(batch_idx)
-        x = x.view(batch_size, x_dim)
-        x = x.to(DEVICE)
+with profile(activities=[ProfilerActivity.CPU], record_shapes=True, on_trace_ready=tensorboard_trace_handler("./log/vae")) as prof:
+    for epoch in range(epochs):
+        overall_loss = 0
+        for batch_idx, (x, _) in enumerate(train_loader):
+            if batch_idx % 100 == 0:
+                print(batch_idx)
+            x = x.view(batch_size, x_dim)
+            x = x.to(DEVICE)
 
-        optimizer.zero_grad()
+            optimizer.zero_grad()
 
-        x_hat, mean, log_var = model(x)
-        loss = loss_function(x, x_hat, mean, log_var)
+            x_hat, mean, log_var = model(x)
+            loss = loss_function(x, x_hat, mean, log_var)
 
-        overall_loss += loss.item()
+            overall_loss += loss.item()
 
-        loss.backward()
-        optimizer.step()
-    print(
-        "\tEpoch",
-        epoch + 1,
-        "complete!",
-        "\tAverage Loss: ",
-        overall_loss / (batch_idx * batch_size),
-    )
+            loss.backward()
+            optimizer.step()
+            prof.step()
+        print(
+            "\tEpoch",
+            epoch + 1,
+            "complete!",
+            "\tAverage Loss: ",
+            overall_loss / (batch_idx * batch_size),
+        )
 print("Finish!!")
 
 # Generate reconstructions
